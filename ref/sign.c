@@ -8,6 +8,13 @@
 #include "symmetric.h"
 #include "fips202.h"
 
+#include <stdio.h>
+void print_hex(char *name, uint8_t *buffer, size_t len);
+void print_poly(char *name, poly *p);
+void print_polyvecl(char *name, polyvecl *pv);
+void print_polyveck(char *name, polyveck *pv);
+void print_matrix(char *name, polyvecl pv[K]);
+
 /*************************************************
 * Name:        crypto_sign_keypair
 *
@@ -57,9 +64,19 @@ int crypto_sign_keypair(uint8_t *pk, uint8_t *sk) {
   polyveck_power2round(&t1, &t0, &t1);
   pack_pk(pk, rho, &t1);
 
+  //print_hex ("-- rho", rho, SEEDBYTES);
+  //print_polyveck ("-- t1", &t1);
+
   /* Compute H(rho, t1) and write secret key */
   shake256(tr, SEEDBYTES, pk, CRYPTO_PUBLICKEYBYTES);
   pack_sk(sk, rho, tr, key, &t0, &s1, &s2);
+
+  //print_hex ("-- rho", rho, SEEDBYTES);
+  //print_hex ("-- tr", tr, SEEDBYTES);
+  //print_hex ("-- key", key, SEEDBYTES);
+  //print_polyveck ("-- t0", &t0);
+  //print_polyvecl ("-- s1", &s1);
+  //print_polyveck ("-- s2", &s2);
 
   return 0;
 }
@@ -99,6 +116,13 @@ int crypto_sign_signature(uint8_t *sig,
   rhoprime = mu + CRHBYTES;
   unpack_sk(rho, tr, key, &t0, &s1, &s2, sk);
 
+  //print_hex ("-- rho", rho, SEEDBYTES);
+  //print_hex ("-- tr", tr, SEEDBYTES);
+  //print_hex ("-- key", key, SEEDBYTES);
+  //print_polyveck ("-- t0", &t0);
+  //print_polyvecl ("-- s1", &s1);
+  //print_polyveck ("-- s2", &s2);
+
   /* Compute CRH(tr, msg) */
   shake256_init(&state);
   shake256_absorb(&state, tr, SEEDBYTES);
@@ -120,6 +144,7 @@ int crypto_sign_signature(uint8_t *sig,
 
 rej:
   /* Sample intermediate vector y */
+  //printf ("-- nonce %d\n", nonce);
   polyvecl_uniform_gamma1(&y, rhoprime, nonce++);
 
   /* Matrix-vector multiplication */
@@ -128,6 +153,10 @@ rej:
   polyvec_matrix_pointwise_montgomery(&w1, mat, &z);
   polyveck_reduce(&w1);
   polyveck_invntt_tomont(&w1);
+
+  if (nonce == 19) {
+    //print_polyvecl ("-- z1", &z);
+  }
 
   /* Decompose w and call the random oracle */
   polyveck_caddq(&w1);
@@ -139,8 +168,23 @@ rej:
   shake256_absorb(&state, sig, K*POLYW1_PACKEDBYTES);
   shake256_finalize(&state);
   shake256_squeeze(sig, SEEDBYTES, &state);
+  
+  if (nonce == 19) {
+    //print_hex ("-- c", sig, SEEDBYTES);
+  }
+
   poly_challenge(&cp, sig);
+  
+  if (nonce == 19) {
+    //print_poly ("-- cp_c", &cp);
+  }
+
   poly_ntt(&cp);
+
+  if (nonce == 19) {
+    //print_poly ("-- cp", &cp);
+    //print_polyvecl ("-- s1", &s1);
+  }
 
   /* Compute z, reject if it reveals secret */
   polyvecl_pointwise_poly_montgomery(&z, &cp, &s1);
@@ -149,6 +193,10 @@ rej:
   polyvecl_reduce(&z);
   if(polyvecl_chknorm(&z, GAMMA1 - BETA))
     goto rej;
+
+  if (nonce == 19) {
+    //print_polyvecl ("-- z2", &z);
+  }
 
   /* Check that subtracting cs2 does not change high bits of w and low bits
    * do not reveal secret information */
@@ -167,11 +215,22 @@ rej:
     goto rej;
 
   polyveck_add(&w0, &w0, &h);
+
   n = polyveck_make_hint(&h, &w0, &w1);
+  //if (nonce == 19) {
+    printf ("-- nonce: %d\n", nonce);
+    print_polyveck ("-- w0", &w0);
+    print_polyveck ("-- w1", &w1);
+    print_polyveck ("-- h", &h);
+    printf ("-- hint: %d\n", n);
+  //}
   if(n > OMEGA)
     goto rej;
 
   /* Write signature */
+  //print_hex ("-- c", sig, SEEDBYTES);
+  //print_polyvecl ("-- z", &z);
+  //print_polyveck ("-- h", &h);
   pack_sig(sig, sig, &z, &h);
   *siglen = CRYPTO_BYTES;
   return 0;
@@ -246,6 +305,13 @@ int crypto_sign_verify(const uint8_t *sig,
     return -1;
   if(polyvecl_chknorm(&z, GAMMA1 - BETA))
     return -1;
+
+  //print_hex ("-- rho", rho, SEEDBYTES);
+  //print_polyveck ("-- t1", &t1);
+
+  //print_hex ("-- c", c, SEEDBYTES);
+  //print_polyvecl ("-- z", &z);
+  //print_polyveck ("-- h", &h);
 
   /* Compute CRH(H(rho, t1), msg) */
   shake256(mu, SEEDBYTES, pk, CRYPTO_PUBLICKEYBYTES);

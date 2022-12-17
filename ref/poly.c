@@ -497,6 +497,8 @@ void poly_challenge(poly *c, const uint8_t seed[SEEDBYTES]) {
   shake256_finalize(&state);
   shake256_squeezeblocks(buf, 1, &state);
 
+  print_hex16 ("-- buf", buf, sizeof(buf));
+
   signs = 0;
   for(i = 0; i < 8; ++i)
     signs |= (uint64_t)buf[i] << 8*i;
@@ -508,6 +510,7 @@ void poly_challenge(poly *c, const uint8_t seed[SEEDBYTES]) {
     do {
       if(pos >= SHAKE256_RATE) {
         shake256_squeezeblocks(buf, 1, &state);
+        print_hex16 ("-- buf", buf, sizeof(buf));
         pos = 0;
       }
 
